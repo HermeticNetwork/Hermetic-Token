@@ -4,7 +4,11 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+import { EticVault } from "./EticVault.sol";
+
 contract HermeticToken is ERC20, Ownable {
+    address[] public ETIC_ADDRESS;
+
     function decimals() public view virtual override returns (uint8) {
         return 7;
     }
@@ -16,19 +20,9 @@ contract HermeticToken is ERC20, Ownable {
     uint256 public MAX_SUPPLY = getDecimal(330000);
     uint16 public INITIAL_SUPPLY = 10000;
 
-    enum TransactionType { Deposit, Withdraw }
-
-    struct Transaction {
-        uint256 value;
-        TransactionType transactionType;
-    }
-
-    Transaction[] public BALLAST_TRANSACTIONS;
-
     mapping(address => bool) public isAddressFrozen;
-    // mapping(address => string) public freezingReasons;
 
-    constructor() ERC20("Hermetic Token", "HERM") {
+    constructor() ERC20("Herm", "H") {
         // This is the fixed prize for creating this ERC-20.
         _mint(msg.sender, INITIAL_SUPPLY); // 0.0010000
     }
@@ -58,18 +52,21 @@ contract HermeticToken is ERC20, Ownable {
         super._burn(sender, burnAmount);
     }
 
-    function getBallast() public view returns (uint256) {
-        uint256 balance = 0;
-
-        for (uint256 i = 0; i < BALLAST_TRANSACTIONS.length; i++) {
-            if (BALLAST_TRANSACTIONS[i].transactionType == TransactionType.Deposit) {
-                balance += BALLAST_TRANSACTIONS[i].value;
-            } else {
-                balance -= BALLAST_TRANSACTIONS[i].value;
-            }
-        }
+    // Impossible to change after setting it the first time.
+    function defineEticVaultAddress(address _etic_address) public onlyOwner {
+        require(ETIC_ADDRESS.length == 0, "ETIC_ADDRESS_HAS_ALREADY_BEEN_DEFINED");
         
-        return balance * 1e5;
+        ETIC_ADDRESS.push(_etic_address);
+    }
+
+    function getBallast() public view returns (uint256) {
+        if (ETIC_ADDRESS.length != 0) {
+            EticVault _etic = EticVault(ETIC_ADDRESS[0]);
+
+            return _etic.vaultBalances()[0]._amount;
+        } else {
+            return 0;
+        }
     }
 
     function getPrice() public view returns (uint256) {
@@ -116,22 +113,5 @@ contract HermeticToken is ERC20, Ownable {
         require(accountBalance > 0, "INSUFFICIENT_BURN_AMOUNT");
         
         _burn(account, accountBalance);
-    }
-
-    function deposit(uint256 value) public onlyOwner {
-        require(value > 0, "EMPTY_DEPOSIT_AMOUNT");
-
-        Transaction memory depositTransaction = Transaction(value, TransactionType.Deposit);
-
-        BALLAST_TRANSACTIONS.push(depositTransaction);
-    }
-
-    function withdraw(uint256 value) public onlyOwner {
-        require(getBallast() >= value, "INSUFFICIENT_WITHDRAW_AMOUNT");
-        require(value > 0, "EMPTY_WITHDRAW_AMOUNT");
-
-        Transaction memory withdrawTransaction = Transaction(value, TransactionType.Withdraw);
-
-        BALLAST_TRANSACTIONS.push(withdrawTransaction);
     }
 }
